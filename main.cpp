@@ -48,6 +48,23 @@ bool isDuplicateLineInFile(string filename, string line_value) {
     return false;
 }
 
+vector<string> retrieveAccountDetails(string filename, string account_id) {
+    vector<string> account{};
+    ifstream infile;
+    infile.open(filename);
+    string line;
+    while (getline(infile, line)) {
+        if (line.find(account_id) != string::npos) {
+            size_t pos = 0;
+            while ((pos = line.find(",")) != string::npos) {
+                account.push_back(line.substr(0, pos));
+                line.erase(0, pos+1);
+            }
+        }
+    }
+    return account;
+}
+
 string transformAccountCatergory(int id) {
     string transformed_category;
     string category = (id == 1) ? "Residential" :
@@ -70,7 +87,7 @@ string transformAccountCatergory(int id) {
     return transformed_category;
 }
 
-string generateMeterNumber() {
+string generateDigitNumbers(int random_limit) {
     string numberString;
 
     time_t timestamp = time(nullptr);
@@ -78,9 +95,9 @@ string generateMeterNumber() {
 
     random_device rd;
     mt19937 generator(rd());
-    uniform_int_distribution<int> distribution(0, 9);
+    uniform_int_distribution<int> distribution(0, random_limit - 1);
 
-    while (numberString.length() < 10) {
+    while (numberString.length() < random_limit) {
         int digit = distribution(generator);
         numberString += to_string(digit);
     }
@@ -170,9 +187,11 @@ vector<string> registerNewMeterNumber() {
             continue;
         } else if (category < 9 && category > 0) {
             string catergory_name = transformAccountCatergory(category);
-            newMeterAccount = captureAccountDetails();
+            vector<string> account = captureAccountDetails();
+            newMeterAccount.push_back(account.at(0));
+            newMeterAccount.push_back(account.at(1));
             newMeterAccount.push_back(catergory_name);
-            newMeterAccount.push_back(generateMeterNumber());
+            newMeterAccount.push_back(generateDigitNumbers(10));
             return newMeterAccount;
         } else {
             cout << "Invalid category entered. Try again!" << endl;
@@ -181,7 +200,7 @@ vector<string> registerNewMeterNumber() {
     return newMeterAccount;
 }
 
-vector<string> payElectricityBills() {
+vector<string> payElectricityAccountDetails() {
     vector<string> billDetails{};
     cout << "ELECTRICITY BILL PAYMENT" << endl << endl;
 
@@ -213,10 +232,89 @@ vector<string> payElectricityBills() {
     return billDetails;
 }
 
-int calculateUnits(vector<string> billDetails) {
-    int units = 0;
-    
-    return units;
+int calculateAmountUnitsPerCategory(string account_category, int bill_amount) {
+    if (account_category.compare("RESIDENTIAL") == 0) {
+        if ((bill_amount / 89) <= 15) {
+            return bill_amount / 89;
+        } else if (
+            (bill_amount / 89) > 15 &&
+            (bill_amount / 89) <= 50
+        ) {
+            return 15 + ((bill_amount - (15 * 89)) / 212);
+        } else if (
+            (bill_amount / 89) > 15 &&
+            ((bill_amount - (15 * 89)) / 212) > 50
+        ) {
+            return 15 + (35 * 212) + ((
+                bill_amount - ((15 * 89) + (35 * 212))) / 249
+            );
+        } else {
+            return 0;
+        }
+    } else if (account_category.compare("NON_RESIDENTIAL") == 0) {
+        if ((bill_amount / 227) > 100) {
+            int amount = bill_amount;
+            int units = 0;
+            while (amount > 0) {
+                if ((amount / 227) > 100) {
+                    const int temp_amount = amount - (227 * 100);
+                    units += 100;
+                    amount = temp_amount;
+                }
+                if (units > 0) {
+                    units += (amount / 255);
+                }
+            }
+            return units;
+        } else {
+            return bill_amount / 227;
+        }
+    } else if (account_category.compare("TELECOM_TOWERS") == 0) {
+        return bill_amount / 201;
+    } else if (account_category.compare(
+        "WATER_TREATMENT_PLANTS_AND_WATER_PUMPING_STATIONS") == 0
+    ) {
+        return bill_amount / 126;
+    } else if (account_category.compare("HOTELS") == 0) {
+        return bill_amount / 157;
+    } else if (account_category.compare("HEALTH_FACILITIES") == 0) {
+        return bill_amount / 186;
+    } else if (account_category.compare("BROADCASTERS") == 0) {
+        return bill_amount / 192;
+    } else if (account_category.compare("COMMERCIAL_DATA_CENTERS") == 0) {
+        return bill_amount / 179;
+    }
+
+    return 0;
+}
+
+string insertHyphens(const string& input) {
+    string result;
+    int count = 0;
+
+    for (char c : input) {
+        if (count == 5) {
+            result += '-';
+            count = 0;
+        }
+
+        result += c;
+        count++;
+    }
+
+    return result;
+}
+
+vector<string> calculateUnits(vector<string> accountToBeBilled, vector<string> billDetails) {
+    vector<string> bill{};
+    int units = calculateAmountUnitsPerCategory(
+        accountToBeBilled.at(2), stoi(billDetails.at(1)
+    ));
+    // apply discount logic
+    string token = generateDigitNumbers(20);
+    bill.push_back(to_string(units));
+    bill.push_back(token);
+    return bill;
 }
 
 int helperMenu() {
@@ -246,13 +344,35 @@ int helperMenu() {
                     .append(account.at(2)).append(",")
                     .append(account.at(3));
                 addDataToFile("accounts.csv", account_user);
-                cout << "Account for " << account.at(0) << " successfully created!";
+                cout << "Account for " << 
+                    account_user.substr(0, account_user.find(",")) <<
+                    " successfully created!" << endl;
             } else {
-                cout << "Sorry, Meter for ID: " << account.at(3) << " is already registered!";
+                cout << "Sorry, Meter for ID: " << account.at(3) << " is already registered!" << endl;
             }
         } else if (command == 2) {
-            vector<string> billDetails = payElectricityBills();
-            int units = calculateUnits(billDetails);
+            vector<string> billDetails = payElectricityAccountDetails();
+            vector<string> accountToBeBilled = retrieveAccountDetails("accounts.csv", billDetails.at(0));
+            if (accountToBeBilled.empty()) {
+                cout << "Your account doesn't exist! Create it first." << endl;
+            } else {
+                vector<string> bill = calculateUnits(accountToBeBilled, billDetails);
+                string data = billDetails.at(0).append(",")
+                    .append(bill.at(0)).append(",")
+                    .append(bill.at(1)).append(",")
+                    .append("Unused");
+                addDataToFile("tokens.csv", data);
+                cout << "==================================================================" <<endl;
+                cout << "*               E L E C R I L I T Y     B I L L                  *" <<endl;
+                cout << "==================================================================" <<endl;
+                cout << "CUSTOMER NAME           : " << accountToBeBilled.at(0) <<endl;
+                cout << "AMOUNT                  : " << billDetails.at(1) <<endl;
+                cout << "ADDITIONAL CHARGES      : " << "0.00" <<endl;
+                cout << "UNIT BOUGHT             : " << bill.at(0) <<endl;
+                cout << "TOKEN                   : " << insertHyphens(bill.at(1)) <<endl;
+                cout << "TOKEN STATUS            : " << "UNUSED" <<endl;
+                cout << "==================================================================" <<endl;
+            }
         } else if (command == 3) {
             cout << "==================================================================" <<endl;
             cout << "*                      H E L P   M E N U                         *" <<endl;
